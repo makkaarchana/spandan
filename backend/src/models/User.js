@@ -1,6 +1,7 @@
 
 import mongoose from 'mongoose'
 import { hash, compare } from '@node-rs/bcrypt'
+import { TERMS_VERSION } from '../config/terms.js'
 
 const BCRYPT_COST = Number(process.env.BCRYPT_COST) || 10
 
@@ -38,9 +39,12 @@ const userSchema = new mongoose.Schema(
 
     password: {
       type: String,
-      required: [function () {
-        return !this.googleId
-      }, 'Password is required'],
+      required: [
+        function () {
+          return !this.googleId
+        },
+        'Password is required'
+      ],
       minlength: [6, 'Password must be at least 6 characters']
     },
 
@@ -149,6 +153,17 @@ const userSchema = new mongoose.Schema(
       default: ''
     },
 
+    // Terms of Use acceptance
+    termsVersion: {
+      type: String,
+      default: null
+    },
+
+    termsAcceptedAt: {
+      type: Date,
+      default: null
+    },
+
     isActive: {
       type: Boolean,
       default: true
@@ -164,8 +179,7 @@ const userSchema = new mongoose.Schema(
   }
 )
 
-// Hash the password before saving.
-// Existing password hashes are not rehashed unless the password changes.
+// Hash passwords before saving.
 userSchema.pre('save', async function () {
   if (!this.isModified('password') || !this.password) {
     return
@@ -174,7 +188,7 @@ userSchema.pre('save', async function () {
   this.password = await hash(this.password, BCRYPT_COST)
 })
 
-// Compare a login password with the stored hash.
+// Compare the entered password with its stored hash.
 userSchema.methods.comparePassword = async function (candidatePassword) {
   if (!this.password || typeof candidatePassword !== 'string') {
     return false
@@ -183,10 +197,11 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
   return compare(candidatePassword, this.password)
 }
 
-// Never include the password hash in JSON responses.
+// Never expose password hashes in API responses.
 userSchema.methods.toJSON = function () {
   const obj = this.toObject()
   delete obj.password
+  obj.termsAccepted = obj.termsVersion === TERMS_VERSION
   return obj
 }
 
